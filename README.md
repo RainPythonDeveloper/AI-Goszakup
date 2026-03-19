@@ -54,7 +54,7 @@ API goszakup.gov.kz (REST + GraphQL)
 ### 1. Клонируйте и настройте
 
 ```bash
-git clone https://github.com/RainPythonDeveloper/AiGoszakup.git
+git clone https://github.com/RainPythonDeveloper/AI-Goszakup.git
 cd AiGoszakup
 cp .env.example .env
 ```
