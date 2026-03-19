@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Госзакупки РК</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            AI Госзакупки РК
+            <small id="header-subtitle">Аналитика государственных закупок</small>
+        </div>
+        <button id="lang-toggle" onclick="toggleLang()">ҚАЗ</button>
+    </div>
+    <div class="chat-container" id="chat">
+        <div class="examples" id="examples">
+            <p id="examples-title">Примеры запросов:</p>
+            <button onclick="sendExample(this)" data-ru="Сколько данных загружено?" data-kk="Қанша деректер жүктелген?">Сколько данных загружено?</button>
+            <button onclick="sendExample(this)" data-ru="Топ-5 заказчиков по сумме договоров" data-kk="Келісімшарттар сомасы бойынша топ-5 тапсырысшы">Топ-5 заказчиков по сумме договоров</button>
+            <button onclick="sendExample(this)" data-ru="Покажи ценовые аномалии" data-kk="Бағалық ауытқуларды көрсет">Покажи ценовые аномалии</button>
+            <button onclick="sendExample(this)" data-ru="Анализ концентрации поставщиков" data-kk="Жеткізушілер шоғырлануын талда">Анализ концентрации поставщиков</button>
+        </div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="input" placeholder="Задайте вопрос о госзакупках..."
+               onkeypress="if(event.key==='Enter')send()">
+        <button id="btn" onclick="send()">Отправить</button>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

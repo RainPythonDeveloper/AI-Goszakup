@@ -1,0 +1,7 @@
+{
+    "name": "Forbidden",
+    "message": "Access denied",
+    "code": 0,
+    "status": 403,
+    "type": "yii\\web\\HttpException"
+}

@@ -1,0 +1,97 @@
+---
+# App Service (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: goszakup-app
+  namespace: goszakup
+  labels:
+    app: goszakup
+    component: app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: goszakup
+    component: app
+
+---
+# App Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goszakup-app
+  namespace: goszakup
+  labels:
+    app: goszakup
+    component: app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: goszakup
+      component: app
+  template:
+    metadata:
+      labels:
+        app: goszakup
+        component: app
+    spec:
+      # Wait for PostgreSQL to be ready before starting the app
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to become ready..."
+              until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
+                echo "PostgreSQL is not ready yet. Retrying in 2s..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready."
+          envFrom:
+            - configMapRef:
+                name: goszakup-config
+            - secretRef:
+                name: goszakup-secrets
+      containers:
+        - name: app
+          image: goszakup-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: goszakup-config
+            - secretRef:
+                name: goszakup-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3

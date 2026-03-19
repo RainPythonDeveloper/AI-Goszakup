@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.git
+.env
+*.md
+notebooks/
+tests/
+dags/
+*.docx
+.claude/

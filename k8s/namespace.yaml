@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goszakup
+  labels:
+    app: goszakup
+    purpose: ai-procurement-analytics

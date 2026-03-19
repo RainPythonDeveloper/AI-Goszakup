@@ -1,0 +1,554 @@
+---
+# ConfigMap holding the SQL initialization scripts
+# These are applied by the init container on first boot
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: goszakup
+  labels:
+    app: goszakup
+    component: postgres
+data:
+  01-schema.sql: |
+    -- ============================================================
+    -- AI-Агент Госзакупок РК: Схема БД
+    -- PostgreSQL 16
+    -- ============================================================
+
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+    -- СПРАВОЧНИКИ
+    CREATE TABLE IF NOT EXISTS ref_statuses (
+        id          SERIAL PRIMARY KEY,
+        code        VARCHAR(50) NOT NULL,
+        name_ru     VARCHAR(500),
+        name_kz     VARCHAR(500),
+        entity_type VARCHAR(50) NOT NULL,
+        UNIQUE (code, entity_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS ref_methods (
+        id      SERIAL PRIMARY KEY,
+        code    VARCHAR(50) UNIQUE NOT NULL,
+        name_ru VARCHAR(500),
+        name_kz VARCHAR(500)
+    );
+
+    CREATE TABLE IF NOT EXISTS ref_units (
+        id      SERIAL PRIMARY KEY,
+        code    VARCHAR(50) UNIQUE NOT NULL,
+        name_ru VARCHAR(500),
+        name_kz VARCHAR(500)
+    );
+
+    CREATE TABLE IF NOT EXISTS ref_kato (
+        id      SERIAL PRIMARY KEY,
+        code    VARCHAR(20) UNIQUE NOT NULL,
+        name_ru VARCHAR(500),
+        name_kz VARCHAR(500),
+        region  VARCHAR(200),
+        level   SMALLINT
+    );
+
+    CREATE TABLE IF NOT EXISTS ref_enstru (
+        id          SERIAL PRIMARY KEY,
+        code        VARCHAR(50) UNIQUE NOT NULL,
+        name_ru     VARCHAR(1000),
+        name_kz     VARCHAR(1000),
+        parent_code VARCHAR(50),
+        level       SMALLINT
+    );
+
+    CREATE TABLE IF NOT EXISTS ref_currencies (
+        id      SERIAL PRIMARY KEY,
+        code    VARCHAR(10) UNIQUE NOT NULL,
+        name_ru VARCHAR(100)
+    );
+
+    -- ОСНОВНЫЕ ТАБЛИЦЫ
+    CREATE TABLE IF NOT EXISTS subjects (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        bin             VARCHAR(12) NOT NULL,
+        iin             VARCHAR(12),
+        name_ru         VARCHAR(1000),
+        name_kz         VARCHAR(1000),
+        is_customer     BOOLEAN DEFAULT FALSE,
+        is_organizer    BOOLEAN DEFAULT FALSE,
+        is_supplier     BOOLEAN DEFAULT FALSE,
+        kato_code       VARCHAR(20),
+        address         TEXT,
+        created_at      TIMESTAMP DEFAULT NOW(),
+        updated_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subjects_bin ON subjects(bin);
+
+    CREATE TABLE IF NOT EXISTS plans (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        bin             VARCHAR(12) NOT NULL,
+        enstru_code     VARCHAR(50),
+        plan_sum        NUMERIC(20, 2),
+        plan_count      NUMERIC(20, 4),
+        method_id       INTEGER REFERENCES ref_methods(id),
+        year            SMALLINT,
+        month           SMALLINT,
+        source_funding  VARCHAR(500),
+        delivery_kato   VARCHAR(20),
+        status          VARCHAR(100),
+        created_at      TIMESTAMP DEFAULT NOW(),
+        updated_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS announcements (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        number_anno     VARCHAR(100),
+        name_ru         TEXT,
+        total_sum       NUMERIC(20, 2),
+        method_id       INTEGER REFERENCES ref_methods(id),
+        status_id       INTEGER REFERENCES ref_statuses(id),
+        organizer_bin   VARCHAR(12),
+        customer_bin    VARCHAR(12),
+        start_date      TIMESTAMP,
+        end_date        TIMESTAMP,
+        publish_date    TIMESTAMP,
+        is_construction BOOLEAN DEFAULT FALSE,
+        lot_count       INTEGER,
+        source_system   SMALLINT,
+        created_at      TIMESTAMP DEFAULT NOW(),
+        updated_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS lots (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        announcement_id BIGINT REFERENCES announcements(id),
+        lot_number      VARCHAR(50),
+        name_ru         TEXT,
+        name_ru_clean   TEXT,
+        description     TEXT,
+        amount          NUMERIC(20, 2),
+        count           NUMERIC(20, 4),
+        unit_id         INTEGER REFERENCES ref_units(id),
+        price_per_unit  NUMERIC(20, 4),
+        enstru_code     VARCHAR(50),
+        customer_bin    VARCHAR(12),
+        delivery_kato   VARCHAR(20),
+        status_id       INTEGER REFERENCES ref_statuses(id),
+        plan_id         BIGINT REFERENCES plans(id),
+        created_at      TIMESTAMP DEFAULT NOW(),
+        updated_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS contracts (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        contract_number VARCHAR(100),
+        announcement_id BIGINT REFERENCES announcements(id),
+        supplier_bin    VARCHAR(12),
+        customer_bin    VARCHAR(12),
+        contract_sum    NUMERIC(20, 2),
+        sign_date       DATE,
+        ec_end_date     DATE,
+        status_id       INTEGER REFERENCES ref_statuses(id),
+        contract_type   VARCHAR(200),
+        lot_id          BIGINT REFERENCES lots(id),
+        source_system   SMALLINT,
+        created_at      TIMESTAMP DEFAULT NOW(),
+        updated_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS contract_subjects (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        contract_id     BIGINT REFERENCES contracts(id),
+        enstru_code     VARCHAR(50),
+        name_ru         TEXT,
+        quantity        NUMERIC(20, 4),
+        unit_id         INTEGER REFERENCES ref_units(id),
+        price_per_unit  NUMERIC(20, 4),
+        total_price     NUMERIC(20, 2),
+        delivery_kato   VARCHAR(20),
+        created_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS applications (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        announcement_id BIGINT REFERENCES announcements(id),
+        supplier_bin    VARCHAR(12),
+        lot_id          BIGINT REFERENCES lots(id),
+        price_offer     NUMERIC(20, 2),
+        discount        NUMERIC(10, 4),
+        submission_date TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        contract_id     BIGINT REFERENCES contracts(id),
+        amount          NUMERIC(20, 2),
+        payment_date    DATE,
+        status          VARCHAR(100),
+        created_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS contract_acts (
+        id              BIGSERIAL PRIMARY KEY,
+        source_id       BIGINT UNIQUE,
+        contract_id     BIGINT REFERENCES contracts(id),
+        act_number      VARCHAR(100),
+        status          VARCHAR(100),
+        approval_date   DATE,
+        amount          NUMERIC(20, 2),
+        created_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    -- СЛУЖЕБНЫЕ ТАБЛИЦЫ
+    CREATE TABLE IF NOT EXISTS raw_data (
+        id              BIGSERIAL PRIMARY KEY,
+        source_endpoint VARCHAR(200) NOT NULL,
+        source_id       BIGINT,
+        raw_json        JSONB NOT NULL,
+        loaded_at       TIMESTAMP DEFAULT NOW(),
+        processed       BOOLEAN DEFAULT FALSE
+    );
+
+    CREATE TABLE IF NOT EXISTS data_quality_log (
+        id              BIGSERIAL PRIMARY KEY,
+        table_name      VARCHAR(100) NOT NULL,
+        record_id       BIGINT,
+        source_id       BIGINT,
+        issue           TEXT NOT NULL,
+        severity        VARCHAR(20) DEFAULT 'warning',
+        detected_at     TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_journal (
+        id              BIGSERIAL PRIMARY KEY,
+        entity_type     VARCHAR(50) NOT NULL,
+        entity_id       BIGINT NOT NULL,
+        action          CHAR(1) NOT NULL,
+        event_date      TIMESTAMP NOT NULL,
+        api_url         TEXT,
+        processed       BOOLEAN DEFAULT FALSE,
+        processed_at    TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS load_metadata (
+        id              BIGSERIAL PRIMARY KEY,
+        entity_type     VARCHAR(50) NOT NULL,
+        last_source_id  BIGINT,
+        total_loaded    INTEGER DEFAULT 0,
+        status          VARCHAR(20) DEFAULT 'pending',
+        started_at      TIMESTAMP,
+        completed_at    TIMESTAMP,
+        error_message   TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS inflation_index (
+        id              SERIAL PRIMARY KEY,
+        year            SMALLINT NOT NULL,
+        month           SMALLINT NOT NULL,
+        cpi             NUMERIC(10, 4) NOT NULL,
+        UNIQUE (year, month)
+    );
+
+    INSERT INTO inflation_index (year, month, cpi) VALUES
+        (2024, 1,  100.00), (2024, 2,  100.80), (2024, 3,  101.20),
+        (2024, 4,  101.60), (2024, 5,  102.00), (2024, 6,  102.50),
+        (2024, 7,  103.00), (2024, 8,  103.40), (2024, 9,  103.80),
+        (2024, 10, 104.20), (2024, 11, 104.70), (2024, 12, 105.20),
+        (2025, 1,  105.80), (2025, 2,  106.30), (2025, 3,  106.80),
+        (2025, 4,  107.20), (2025, 5,  107.70), (2025, 6,  108.20),
+        (2025, 7,  108.70), (2025, 8,  109.10), (2025, 9,  109.60),
+        (2025, 10, 110.10), (2025, 11, 110.60), (2025, 12, 111.10),
+        (2026, 1,  111.60), (2026, 2,  112.10), (2026, 3,  112.60)
+    ON CONFLICT DO NOTHING;
+
+  02-indexes.sql: |
+    -- Индексы для ускорения запросов AI-агента
+    CREATE INDEX IF NOT EXISTS idx_ref_kato_region ON ref_kato(region);
+    CREATE INDEX IF NOT EXISTS idx_ref_enstru_parent ON ref_enstru(parent_code);
+    CREATE INDEX IF NOT EXISTS idx_plans_bin ON plans(bin);
+    CREATE INDEX IF NOT EXISTS idx_plans_enstru ON plans(enstru_code);
+    CREATE INDEX IF NOT EXISTS idx_plans_year ON plans(year);
+    CREATE INDEX IF NOT EXISTS idx_announcements_number ON announcements(number_anno);
+    CREATE INDEX IF NOT EXISTS idx_announcements_organizer ON announcements(organizer_bin);
+    CREATE INDEX IF NOT EXISTS idx_announcements_customer ON announcements(customer_bin);
+    CREATE INDEX IF NOT EXISTS idx_announcements_publish_date ON announcements(publish_date);
+    CREATE INDEX IF NOT EXISTS idx_announcements_status ON announcements(status_id);
+    CREATE INDEX IF NOT EXISTS idx_lots_announcement ON lots(announcement_id);
+    CREATE INDEX IF NOT EXISTS idx_lots_enstru ON lots(enstru_code);
+    CREATE INDEX IF NOT EXISTS idx_lots_customer ON lots(customer_bin);
+    CREATE INDEX IF NOT EXISTS idx_lots_delivery_kato ON lots(delivery_kato);
+    CREATE INDEX IF NOT EXISTS idx_lots_status ON lots(status_id);
+    CREATE INDEX IF NOT EXISTS idx_lots_price ON lots(price_per_unit);
+    CREATE INDEX IF NOT EXISTS idx_lots_name_trgm ON lots USING gin(name_ru_clean gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS idx_contracts_announcement ON contracts(announcement_id);
+    CREATE INDEX IF NOT EXISTS idx_contracts_supplier ON contracts(supplier_bin);
+    CREATE INDEX IF NOT EXISTS idx_contracts_customer ON contracts(customer_bin);
+    CREATE INDEX IF NOT EXISTS idx_contracts_sign_date ON contracts(sign_date);
+    CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status_id);
+    CREATE INDEX IF NOT EXISTS idx_contracts_lot ON contracts(lot_id);
+    CREATE INDEX IF NOT EXISTS idx_contract_subjects_contract ON contract_subjects(contract_id);
+    CREATE INDEX IF NOT EXISTS idx_contract_subjects_enstru ON contract_subjects(enstru_code);
+    CREATE INDEX IF NOT EXISTS idx_contract_subjects_kato ON contract_subjects(delivery_kato);
+    CREATE INDEX IF NOT EXISTS idx_applications_announcement ON applications(announcement_id);
+    CREATE INDEX IF NOT EXISTS idx_applications_supplier ON applications(supplier_bin);
+    CREATE INDEX IF NOT EXISTS idx_applications_lot ON applications(lot_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_contract ON payments(contract_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);
+    CREATE INDEX IF NOT EXISTS idx_contract_acts_contract ON contract_acts(contract_id);
+    CREATE INDEX IF NOT EXISTS idx_raw_data_endpoint ON raw_data(source_endpoint);
+    CREATE INDEX IF NOT EXISTS idx_raw_data_processed ON raw_data(processed) WHERE NOT processed;
+    CREATE INDEX IF NOT EXISTS idx_sync_journal_processed ON sync_journal(processed) WHERE NOT processed;
+    CREATE INDEX IF NOT EXISTS idx_sync_journal_entity ON sync_journal(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_dq_log_table ON data_quality_log(table_name);
+    CREATE INDEX IF NOT EXISTS idx_dq_log_severity ON data_quality_log(severity);
+
+  03-views.sql: |
+    -- Materialized Views: Витрины данных для AI-агента
+
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mv_price_statistics AS
+    SELECT
+        cs.enstru_code,
+        cs.delivery_kato,
+        rk.region AS delivery_region,
+        date_trunc('quarter', c.sign_date)::DATE AS period,
+        EXTRACT(YEAR FROM c.sign_date)::SMALLINT AS year,
+        COUNT(*) AS sample_size,
+        SUM(cs.price_per_unit * cs.quantity) / NULLIF(SUM(cs.quantity), 0) AS weighted_avg_price,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cs.price_per_unit) AS median_price,
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY cs.price_per_unit) AS q1,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY cs.price_per_unit) AS q3,
+        MIN(cs.price_per_unit) AS min_price,
+        MAX(cs.price_per_unit) AS max_price,
+        STDDEV(cs.price_per_unit) AS std_dev,
+        SUM(cs.quantity) AS total_quantity,
+        SUM(cs.total_price) AS total_sum
+    FROM contract_subjects cs
+    JOIN contracts c ON cs.contract_id = c.id
+    LEFT JOIN ref_kato rk ON cs.delivery_kato = rk.code
+    WHERE cs.price_per_unit IS NOT NULL
+      AND cs.price_per_unit > 0
+      AND c.sign_date IS NOT NULL
+    GROUP BY cs.enstru_code, cs.delivery_kato, rk.region,
+             date_trunc('quarter', c.sign_date), EXTRACT(YEAR FROM c.sign_date)
+    WITH DATA;
+
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mv_volume_trends AS
+    SELECT
+        l.enstru_code,
+        l.customer_bin,
+        s.name_ru AS customer_name,
+        EXTRACT(YEAR FROM a.publish_date)::SMALLINT AS year,
+        COUNT(DISTINCT l.id) AS lot_count,
+        SUM(l.count) AS total_quantity,
+        SUM(l.amount) AS total_amount,
+        AVG(l.price_per_unit) AS avg_price_per_unit
+    FROM lots l
+    JOIN announcements a ON l.announcement_id = a.id
+    LEFT JOIN subjects s ON l.customer_bin = s.bin
+    WHERE l.enstru_code IS NOT NULL
+      AND a.publish_date IS NOT NULL
+    GROUP BY l.enstru_code, l.customer_bin, s.name_ru,
+             EXTRACT(YEAR FROM a.publish_date)
+    WITH DATA;
+
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mv_supplier_stats AS
+    SELECT
+        c.supplier_bin,
+        s.name_ru AS supplier_name,
+        COUNT(DISTINCT c.id) AS contract_count,
+        SUM(c.contract_sum) AS total_sum,
+        AVG(c.contract_sum) AS avg_contract_sum,
+        COUNT(DISTINCT c.customer_bin) AS unique_customers,
+        MIN(c.sign_date) AS first_contract,
+        MAX(c.sign_date) AS last_contract
+    FROM contracts c
+    LEFT JOIN subjects s ON c.supplier_bin = s.bin
+    WHERE c.supplier_bin IS NOT NULL
+    GROUP BY c.supplier_bin, s.name_ru
+    WITH DATA;
+
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mv_regional_coefficients AS
+    SELECT
+        cs.enstru_code,
+        rk.region,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cs.price_per_unit) AS regional_median,
+        COUNT(*) AS sample_size
+    FROM contract_subjects cs
+    JOIN contracts c ON cs.contract_id = c.id
+    LEFT JOIN ref_kato rk ON cs.delivery_kato = rk.code
+    WHERE cs.price_per_unit IS NOT NULL
+      AND cs.price_per_unit > 0
+      AND rk.region IS NOT NULL
+    GROUP BY cs.enstru_code, rk.region
+    WITH DATA;
+
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mv_data_overview AS
+    SELECT
+        'subjects' AS entity, COUNT(*) AS cnt FROM subjects
+    UNION ALL SELECT 'announcements', COUNT(*) FROM announcements
+    UNION ALL SELECT 'lots', COUNT(*) FROM lots
+    UNION ALL SELECT 'contracts', COUNT(*) FROM contracts
+    UNION ALL SELECT 'contract_subjects', COUNT(*) FROM contract_subjects
+    UNION ALL SELECT 'plans', COUNT(*) FROM plans
+    UNION ALL SELECT 'applications', COUNT(*) FROM applications
+    UNION ALL SELECT 'payments', COUNT(*) FROM payments
+    UNION ALL SELECT 'contract_acts', COUNT(*) FROM contract_acts
+    WITH DATA;
+
+---
+# PostgreSQL Service (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: goszakup
+  labels:
+    app: goszakup
+    component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+  selector:
+    app: goszakup
+    component: postgres
+
+---
+# PostgreSQL StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: goszakup
+  labels:
+    app: goszakup
+    component: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goszakup
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: goszakup
+        component: postgres
+    spec:
+      # Init container: apply schema, indexes, views on first startup
+      initContainers:
+        - name: init-schema
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" 2>/dev/null; do
+                # On first boot, PostgreSQL main container may not be up yet.
+                # The init scripts are applied via /docker-entrypoint-initdb.d/ instead.
+                echo "PostgreSQL not ready yet, init scripts will be applied by entrypoint."
+                exit 0
+              done
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: goszakup-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: goszakup-config
+                  key: POSTGRES_DB
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: goszakup-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: goszakup-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: goszakup-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - goszakup
+                - -d
+                - goszakup
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - goszakup
+                - -d
+                - goszakup
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+        labels:
+          app: goszakup
+          component: postgres
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi

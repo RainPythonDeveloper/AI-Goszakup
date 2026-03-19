@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: goszakup-config
+  namespace: goszakup
+  labels:
+    app: goszakup
+data:
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "goszakup"
+  POSTGRES_USER: "goszakup"
+  LLM_BASE_URL: "https://nitec-ai.kz/api"
+  LLM_MODEL: "openai/gpt-oss-120b"
+  APP_PORT: "8000"
+  LOG_LEVEL: "INFO"

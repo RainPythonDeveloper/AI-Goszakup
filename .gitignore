@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+
+# Environment / Secrets
+.env
+k8s/secret.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+postgres_data/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/*.html
+
+# ML Models
+models/*.pkl
+models/*.joblib
+
+# Logs
+logs/
+*.log
+
+# Data
+data/raw/
+data/processed/
